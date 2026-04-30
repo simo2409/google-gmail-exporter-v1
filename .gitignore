@@ -1,0 +1,17 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Google OAuth secrets — never commit these
+credentials.json
+token.json
+
+# Fetched emails
+emails/

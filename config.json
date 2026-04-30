@@ -1,0 +1,11 @@
+{
+  "searches": [
+    {
+      "sender": "aaa@bbb.ccc",
+      "max_results": 500,
+      "output_path": "emails",
+      "save_json": true,
+      "save_html": true
+    }
+  ]
+}
