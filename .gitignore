@@ -13,5 +13,8 @@ wheels/
 credentials.json
 token.json
 
+# config.json
+config.json
+
 # Fetched emails
 emails/
