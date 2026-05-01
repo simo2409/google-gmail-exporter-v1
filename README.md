@@ -1,4 +1,4 @@
-# email-fetcher-v1
+# google-gmail-exporter-v1
 
 Script Python che recupera email da Gmail tramite API e le salva localmente, organizzate per mittente.
 
