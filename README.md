@@ -2,6 +2,9 @@
 
 Script Python che recupera email da Gmail tramite API e le salva localmente, organizzate per mittente.
 
+## GitHub
+https://github.com/simo2409/google-gmail-exporter-v1
+
 ## Come funziona
 
 Le ricerche da eseguire sono definite in `config.json`. Per ogni ricerca lo script:
