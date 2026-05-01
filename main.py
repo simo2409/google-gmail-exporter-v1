@@ -14,6 +14,7 @@ import json
 import mimetypes
 import re
 import sys
+import time
 from pathlib import Path
 
 import requests
@@ -22,12 +23,30 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 BASE_DIR = Path(__file__).parent
 CREDENTIALS_FILE = BASE_DIR / "credentials.json"
 TOKEN_FILE = BASE_DIR / "token.json"
 CONFIG_FILE = BASE_DIR / "config.json"
+
+_RETRYABLE_STATUSES = (429, 500, 502, 503, 504)
+
+
+def _execute_with_retry(request, max_retries: int = 5):
+    delay = 1.0
+    for attempt in range(max_retries):
+        try:
+            return request.execute()
+        except HttpError as exc:
+            if exc.resp.status in _RETRYABLE_STATUSES and attempt < max_retries - 1:
+                print(f"  API error {exc.resp.status}, retrying in {delay:.1f}s…")
+                time.sleep(delay)
+                delay = min(delay * 2, 60)
+            else:
+                raise
+
 
 MIME_EXT: dict[str, str] = {
     "image/jpeg": ".jpg",
@@ -128,12 +147,11 @@ def extract_cid_parts(payload: dict, service, msg_id: str) -> dict[str, tuple[by
         content_id = hdrs.get("content-id", "").strip("<>")
         attachment_id = part.get("body", {}).get("attachmentId")
         if content_id and attachment_id:
-            att = (
+            att = _execute_with_retry(
                 service.users()
                 .messages()
                 .attachments()
                 .get(userId="me", messageId=msg_id, id=attachment_id)
-                .execute()
             )
             cid_map[content_id] = (
                 base64.urlsafe_b64decode(att["data"]),
@@ -191,8 +209,8 @@ def download_and_localize_images(
                 header, b64data = src.split(",", 1)
                 mime = header.split(":")[1].split(";")[0]
                 local_name = save_image(base64.b64decode(b64data), mime, folder)
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"  Warning: could not save data-URI image: {exc}")
 
         elif src.startswith("cid:"):
             cid = src[4:].strip()
@@ -206,8 +224,8 @@ def download_and_localize_images(
                 if resp.ok:
                     mime = resp.headers.get("Content-Type", "image/jpeg").split(";")[0]
                     local_name = save_image(resp.content, mime, folder)
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"  Warning: could not download image {src[:80]!r}: {exc}")
 
         if local_name:
             img["src"] = local_name
@@ -313,12 +331,12 @@ def list_messages(service, query: str, max_results: int | None) -> list[dict]:
         kwargs: dict = {"userId": "me", "q": query, "maxResults": page_size}
         if page_token:
             kwargs["pageToken"] = page_token
-        result = service.users().messages().list(**kwargs).execute()
+        result = _execute_with_retry(service.users().messages().list(**kwargs))
         messages.extend(result.get("messages", []))
         page_token = result.get("nextPageToken")
         if not page_token:
             break
-    return messages
+    return messages if max_results is None else messages[:max_results]
 
 
 # ---------------------------------------------------------------------------
@@ -361,11 +379,10 @@ def run_search(search: dict, service) -> None:
             skipped += 1
             continue
 
-        msg = (
+        msg = _execute_with_retry(
             service.users()
             .messages()
             .get(userId="me", id=msg_id, format="full")
-            .execute()
         )
         save_email(msg, service, output_dir, label, save_json, save_html)
         fetched += 1
