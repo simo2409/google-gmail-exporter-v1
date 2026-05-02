@@ -29,18 +29,21 @@ Per ogni email salvata con `save_html: true` vengono anche scaricate tutte le im
 
 ### 1. Credenziali Google
 
-Le credenziali OAuth sono condivise con tutti gli altri tool llmwiki e vanno collocate in:
+Lo script cerca le credenziali OAuth in questo ordine:
 
-```
-~/.config/llmwiki/obs-llmwiki-simone-personal-v1/credentials.json
-```
+1. **`credentials.json` nella directory dello script** (locale, priorità alta)
+2. **`~/.config/llmwiki/obs-llmwiki-simone-personal-v1/credentials.json`** (condivisa con tutti i tool llmwiki, fallback)
 
-Per ottenerle:
+Il token OAuth viene salvato accanto al file di credenziali usato:
+- credenziali locali → `token.json` nella directory dello script
+- credenziali condivise → `token-gmail.json` in `~/.config/llmwiki/obs-llmwiki-simone-personal-v1/`
+
+Per ottenere le credenziali:
 
 - Vai su [Google Cloud Console](https://console.cloud.google.com)
 - Abilita la **Gmail API**
 - Crea credenziali OAuth 2.0 (tipo: Desktop app)
-- Scarica il JSON e salvalo nel percorso sopra (crea la directory se non esiste)
+- Scarica il JSON e salvalo nel percorso desiderato (crea la directory se non esiste)
 - In **OAuth consent screen → Test users**, aggiungi il tuo account Gmail
 
 ### 2. Installazione dipendenze
@@ -55,7 +58,7 @@ uv sync
 uv run main.py
 ```
 
-Al primo avvio si apre il browser per autorizzare l'accesso. Il token viene salvato in `~/.config/llmwiki/obs-llmwiki-simone-personal-v1/token-gmail.json` e riutilizzato nelle esecuzioni successive.
+Al primo avvio si apre il browser per autorizzare l'accesso. Il token viene salvato accanto alle credenziali usate e riutilizzato nelle esecuzioni successive.
 
 ## Configurazione
 
@@ -88,7 +91,9 @@ Le ricerche sono definite in `config.json`:
 ## File da non committare
 
 ```
-emails/   # email scaricate — dati personali
+credentials.json   # credenziali OAuth locali — non condividere
+token.json         # token OAuth locale — non condividere
+emails/            # email scaricate — dati personali
 ```
 
-Le credenziali e il token OAuth risiedono in `~/.config/llmwiki/obs-llmwiki-simone-personal-v1/` e non fanno parte di questo repository.
+Le credenziali e il token condivisi risiedono in `~/.config/llmwiki/obs-llmwiki-simone-personal-v1/` e non fanno parte di questo repository.

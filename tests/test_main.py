@@ -13,6 +13,49 @@ import main
 # Helpers
 # ---------------------------------------------------------------------------
 
+
+# ---------------------------------------------------------------------------
+# _resolve_auth_files
+# ---------------------------------------------------------------------------
+
+def test_resolve_auth_files_uses_local_when_present(tmp_path, monkeypatch):
+    local_creds = tmp_path / "credentials.json"
+    local_creds.write_text("{}")
+    local_token = tmp_path / "token.json"
+    monkeypatch.setattr(main, "_LOCAL_CREDENTIALS_FILE", local_creds)
+    monkeypatch.setattr(main, "_LOCAL_TOKEN_FILE", local_token)
+
+    creds_file, token_file = main._resolve_auth_files()
+
+    assert creds_file == local_creds
+    assert token_file == local_token
+
+
+def test_resolve_auth_files_falls_back_to_default_when_no_local(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "_LOCAL_CREDENTIALS_FILE", tmp_path / "credentials.json")
+    default_creds = tmp_path / "default_credentials.json"
+    default_token = tmp_path / "token-gmail.json"
+    monkeypatch.setattr(main, "_DEFAULT_CREDENTIALS_FILE", default_creds)
+    monkeypatch.setattr(main, "_DEFAULT_TOKEN_FILE", default_token)
+
+    creds_file, token_file = main._resolve_auth_files()
+
+    assert creds_file == default_creds
+    assert token_file == default_token
+
+
+def test_resolve_auth_files_local_takes_priority_over_default(tmp_path, monkeypatch):
+    local_creds = tmp_path / "credentials.json"
+    local_creds.write_text("{}")
+    monkeypatch.setattr(main, "_LOCAL_CREDENTIALS_FILE", local_creds)
+    monkeypatch.setattr(main, "_LOCAL_TOKEN_FILE", tmp_path / "token.json")
+    monkeypatch.setattr(main, "_DEFAULT_CREDENTIALS_FILE", tmp_path / "default_credentials.json")
+    monkeypatch.setattr(main, "_DEFAULT_TOKEN_FILE", tmp_path / "token-gmail.json")
+
+    creds_file, _ = main._resolve_auth_files()
+
+    assert creds_file == local_creds
+
 def _encode(text: str) -> str:
     return base64.urlsafe_b64encode(text.encode()).decode()
 
