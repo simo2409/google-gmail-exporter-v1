@@ -29,10 +29,18 @@ Per ogni email salvata con `save_html: true` vengono anche scaricate tutte le im
 
 ### 1. Credenziali Google
 
+Le credenziali OAuth sono condivise con tutti gli altri tool llmwiki e vanno collocate in:
+
+```
+~/.config/llmwiki/obs-llmwiki-simone-personal-v1/credentials.json
+```
+
+Per ottenerle:
+
 - Vai su [Google Cloud Console](https://console.cloud.google.com)
 - Abilita la **Gmail API**
 - Crea credenziali OAuth 2.0 (tipo: Desktop app)
-- Scarica il JSON e salvalo come `credentials.json` nella root del progetto
+- Scarica il JSON e salvalo nel percorso sopra (crea la directory se non esiste)
 - In **OAuth consent screen → Test users**, aggiungi il tuo account Gmail
 
 ### 2. Installazione dipendenze
@@ -47,7 +55,7 @@ uv sync
 uv run main.py
 ```
 
-Al primo avvio si apre il browser per autorizzare l'accesso. Il token viene salvato in `token.json` e riutilizzato nelle esecuzioni successive.
+Al primo avvio si apre il browser per autorizzare l'accesso. Il token viene salvato in `~/.config/llmwiki/obs-llmwiki-simone-personal-v1/token-gmail.json` e riutilizzato nelle esecuzioni successive.
 
 ## Configurazione
 
@@ -80,7 +88,7 @@ Le ricerche sono definite in `config.json`:
 ## File da non committare
 
 ```
-credentials.json   # chiave OAuth — non condividere
-token.json         # token di accesso — non condividere
-emails/            # email scaricate — dati personali
+emails/   # email scaricate — dati personali
 ```
+
+Le credenziali e il token OAuth risiedono in `~/.config/llmwiki/obs-llmwiki-simone-personal-v1/` e non fanno parte di questo repository.

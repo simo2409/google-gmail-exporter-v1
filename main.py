@@ -27,8 +27,9 @@ from googleapiclient.errors import HttpError
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 BASE_DIR = Path(__file__).parent
-CREDENTIALS_FILE = BASE_DIR / "credentials.json"
-TOKEN_FILE = BASE_DIR / "token.json"
+_LLMWIKI_CONFIG_DIR = Path.home() / ".config" / "llmwiki" / "obs-llmwiki-simone-personal-v1"
+CREDENTIALS_FILE = _LLMWIKI_CONFIG_DIR / "credentials.json"
+TOKEN_FILE = _LLMWIKI_CONFIG_DIR / "token-gmail.json"
 CONFIG_FILE = BASE_DIR / "config.json"
 
 _RETRYABLE_STATUSES = (429, 500, 502, 503, 504)
@@ -103,7 +104,8 @@ def authenticate() -> Credentials:
                     "ERROR: credentials.json not found.\n"
                     "Download it from Google Cloud Console:\n"
                     "  APIs & Services → Credentials → OAuth 2.0 Client IDs → Download JSON\n"
-                    f"Place it at: {CREDENTIALS_FILE}"
+                    f"Place it at: {CREDENTIALS_FILE}\n"
+                    f"(shared across all llmwiki utils — create the directory if needed)"
                 )
                 sys.exit(1)
             flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
