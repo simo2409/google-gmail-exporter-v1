@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(uv sync *)",
-      "Bash(uv run *)"
+      "Bash(uv run *)",
+      "Bash(.venv/bin/python -c \"import markdownify\")",
+      "Bash(.venv/bin/python -c \"import html2text\")",
+      "Bash(.venv/bin/uv add *)",
+      "Bash(uv add *)"
     ]
   }
 }

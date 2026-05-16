@@ -5,7 +5,8 @@
       "max_results": 500,
       "output_path": "emails",
       "save_json": true,
-      "save_html": true
+      "save_html": true,
+      "fetch_links": false
     }
   ]
 }

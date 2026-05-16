@@ -6,6 +6,8 @@ Output structure per email (when both save_json and save_html are enabled):
   {output_path}/{stem}/
       {stem}.html                  — HTML with src rewritten to local filenames
       {image_hash}.{ext}           — downloaded images (external URLs, data URIs, CID)
+      links/
+          {url_hash}_{slug}.md     — markdown for each link in the email body
 """
 
 import base64
@@ -16,9 +18,11 @@ import re
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
+from markdownify import markdownify as md
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -254,6 +258,90 @@ def download_and_localize_images(
 
 
 # ---------------------------------------------------------------------------
+# Link fetching
+# ---------------------------------------------------------------------------
+
+def extract_links_from_html(html: str) -> list[str]:
+    """Return unique http/https hrefs from <a> tags, preserving order."""
+    soup = BeautifulSoup(html, "html.parser")
+    seen: set[str] = set()
+    links: list[str] = []
+    for tag in soup.find_all("a", href=True):
+        href = tag["href"].strip()
+        if href.startswith(("http://", "https://")) and href not in seen:
+            seen.add(href)
+            links.append(href)
+    return links
+
+
+def _normalize_url(url: str) -> str:
+    """Strip query string and fragment — same article, different tracking params = same content."""
+    parsed = urlparse(url)
+    return parsed._replace(query="", fragment="").geturl()
+
+
+def _url_to_slug(url: str) -> str:
+    parsed = urlparse(url)
+    path = re.sub(r"[^\w/-]", "", parsed.path).strip("/")
+    slug = re.sub(r"[/_-]+", "-", path)
+    return slug[:60] if slug else parsed.netloc[:60]
+
+
+def fetch_url_as_markdown(url: str, session: requests.Session) -> str | None:
+    try:
+        resp = session.get(url, timeout=15, allow_redirects=True)
+        if not resp.ok:
+            print(f"  Warning: HTTP {resp.status_code} fetching {url[:80]!r}")
+            return None
+        content_type = resp.headers.get("Content-Type", "")
+        if "html" not in content_type:
+            print(f"  Skipping non-HTML link ({content_type}): {url[:80]!r}")
+            return None
+        soup = BeautifulSoup(resp.text, "html.parser")
+        title = soup.title.string.strip() if soup.title and soup.title.string else url
+        body = soup.find("article") or soup.find("main") or soup.body
+        if body is None:
+            return None
+        markdown_body = md(str(body), heading_style="ATX", bullets="-")
+        return f"# {title}\n\nSource: {url}\n\n{markdown_body}"
+    except Exception as exc:
+        print(f"  Warning: could not fetch {url[:80]!r}: {exc}")
+        return None
+
+
+def save_links_as_markdown(html: str, folder: Path) -> None:
+    links = extract_links_from_html(html)
+    if not links:
+        return
+    links_dir = folder / "links"
+    links_dir.mkdir(exist_ok=True)
+    # cache lives at output_dir/_url_cache so the same URL is never fetched twice
+    # across all emails in this search, even across multiple runs
+    cache_dir = folder.parent / "_url_cache"
+    cache_dir.mkdir(exist_ok=True)
+    session = requests.Session()
+    session.headers.update({"User-Agent": "Mozilla/5.0 (compatible; email-fetcher/1.0)"})
+    for url in links:
+        normalized = _normalize_url(url)
+        url_hash = hashlib.md5(normalized.encode()).hexdigest()[:8]
+        slug = _url_to_slug(normalized)
+        filename = f"{url_hash}_{slug}.md" if slug else f"{url_hash}.md"
+        dest = links_dir / filename
+        if dest.exists():
+            continue
+        cached = cache_dir / filename
+        if cached.exists():
+            dest.write_text(cached.read_text(encoding="utf-8"), encoding="utf-8")
+            print(f"    From cache: {filename}")
+            continue
+        content = fetch_url_as_markdown(url, session)
+        if content is not None:
+            cached.write_text(content, encoding="utf-8")
+            dest.write_text(content, encoding="utf-8")
+            print(f"    Saved link: {filename}")
+
+
+# ---------------------------------------------------------------------------
 # Save logic
 # ---------------------------------------------------------------------------
 
@@ -264,6 +352,7 @@ def save_email(
     label: str,
     save_json: bool,
     save_html: bool,
+    fetch_links: bool,
 ) -> None:
     msg_id = msg["id"]
     headers = msg.get("payload", {}).get("headers", [])
@@ -287,12 +376,15 @@ def save_email(
             json.dumps(email_data, indent=2, ensure_ascii=False)
         )
 
-    if save_html and body["html"]:
+    if (save_html or fetch_links) and body["html"]:
         folder = output_dir / stem
         folder.mkdir(exist_ok=True)
-        cid_parts = extract_cid_parts(msg.get("payload", {}), service, msg_id)
-        local_html = download_and_localize_images(body["html"], folder, cid_parts)
-        (folder / f"{stem}.html").write_text(local_html, encoding="utf-8")
+        if save_html:
+            cid_parts = extract_cid_parts(msg.get("payload", {}), service, msg_id)
+            local_html = download_and_localize_images(body["html"], folder, cid_parts)
+            (folder / f"{stem}.html").write_text(local_html, encoding="utf-8")
+        if fetch_links:
+            save_links_as_markdown(body["html"], folder)
 
     print(f"  {label} Saved: {stem}")
 
@@ -369,6 +461,7 @@ def run_search(search: dict, service) -> None:
     output_dir = resolve_output_path(search.get("output_path", "emails"))
     save_json: bool = search.get("save_json", True)
     save_html: bool = search.get("save_html", True)
+    fetch_links: bool = search.get("fetch_links", False)
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -376,7 +469,7 @@ def run_search(search: dict, service) -> None:
     print(f"Sender      : {sender}")
     print(f"Max results : {max_results or 'unlimited'}")
     print(f"Output      : {output_dir}")
-    print(f"Save        : {'json ' if save_json else ''}{'html' if save_html else ''}")
+    print(f"Save        : {'json ' if save_json else ''}{'html ' if save_html else ''}{'links' if fetch_links else ''}")
     print(f"{'─' * 60}")
 
     messages = list_messages(service, f"from:{sender}", max_results)
@@ -395,7 +488,6 @@ def run_search(search: dict, service) -> None:
         label = f"[{i}/{total}]"
 
         if not needs_fetch(entry, save_json, save_html, msg_id):
-            print(f"  {label} Skipped: {msg_id}")
             skipped += 1
             continue
 
@@ -404,7 +496,7 @@ def run_search(search: dict, service) -> None:
             .messages()
             .get(userId="me", id=msg_id, format="full")
         )
-        save_email(msg, service, output_dir, label, save_json, save_html)
+        save_email(msg, service, output_dir, label, save_json, save_html, fetch_links)
         fetched += 1
 
     print(f"\nDone. {fetched} processed, {skipped} skipped.")
